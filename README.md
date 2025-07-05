@@ -65,6 +65,8 @@ Get an unused challenge data instance and mapping for client authentication. Ret
 **Request Body:**
 ```json
 {
+    "user_id": "user-123",
+    "key_name": "keyname-A",
     "timeout_minutes": 30
 }
 ```
