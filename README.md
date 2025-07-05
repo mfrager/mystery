@@ -417,3 +417,105 @@ The protocol ensures that:
 5. All operations are performed without revealing sensitive information
 
 This makes it suitable for applications requiring secure authentication, zero-knowledge proofs, or cryptographic challenges where privacy and security are paramount. 
+
+---
+
+## The "Interactive Transformation" Protocol
+
+This protocol requires a two-step interaction after the initial data is sent. It perfectly satisfies all your constraints:
+1. Two Key Pairs: The Data Owner (O) and Verifier (V) each have their own (pk_O, sk_O) and (pk_V, sk_V).
+2. sk_O is Never Sent: The Data Owner's private key is only ever used locally by the owner.
+3. Mappings are Secret to Verifier: The Data Owner has no knowledge of the mapping rules.
+4. sk_V Cannot Decrypt s: The Verifier never receives a decryptable version of the original secret string s.
+
+Here is the flow:
+1. Data Owner -> Verifier (Round 1):
+    * The Data Owner encrypts the secret string s using its own public key pk_O.
+    * It sends C_s = Encrypt(s, pk_O) to the Verifier.
+2. Verifier -> Data Owner (Round 2):
+    * The Verifier receives C_s. It cannot decrypt this.
+    * The Verifier applies its secret mapping rules m homomorphically: C_sm = C_s * m.
+    * The result, C_sm = Encrypt(s*m, pk_O), is still encrypted under the owner's key. The Verifier learns nothing about s.
+    * The Verifier sends the transformed ciphertext C_sm back to the Data Owner.
+3. Data Owner -> Verifier (Round 3):
+    * The Data Owner receives C_sm.
+    * It uses its own private key sk_O to decrypt it, revealing the plaintext numerical result: result = Decrypt(C_sm, sk_O) = s*m.
+    * The Data Owner now has the final number but does not know the mapping rule m that produced it.
+    * The Data Owner then encrypts this final number using the Verifier's public key pk_V.
+    * It sends C_final = Encrypt(result, pk_V) to the Verifier.
+4. Verifier (Final Check):
+    * The Verifier receives C_final, which is encrypted under its own key.
+    * It can now use this ciphertext in the final sum-of-squared-differences calculation and decrypt the result with its private key sk_V.
+
+The verifier's private key can never be used to decrypt or otherwise discover the data owner's private key. Here is a detailed breakdown of why.
+
+### 1. Mathematically Independent Key Pairs
+
+The most critical security feature of the protocol is established in the provision_keys function.
+
+```python
+# Verifier Keys
+v_priv_ctx = ts.context(ts.SCHEME_TYPE.BFV, poly_mod_degree, plain_modulus)
+# ...
+# Owner Keys
+o_priv_ctx = ts.context(ts.SCHEME_TYPE.BFV, poly_mod_degree, plain_modulus)
+```
+
+This code calls ts.context() twice. Each call independently generates a completely separate and mathematically unrelated key pair (a public key and a secret/private key).
+* Owner's Keys: Reside in owner_private.key (private) and owner_public.context (public).
+* Verifier's Keys: Reside in verifier_private.key (private) and verifier_public.context (public).
+
+Think of these as two different high-security locks from two different manufacturers. The key for the Verifier's lock (verifier_private.key) has no mathematical relationship to the key for the Owner's lock (owner_private.key). Possessing one tells you nothing about the other.
+
+### 2. Strict Segregation of Keys in the Protocol
+
+The code is carefully designed to ensure that no party ever has access to the other party's private key. Let's trace the key usage:
+
+1. **Owner (owner_register_data, owner_finalize_data):**
+    * Loads its own private key (owner_key) to encrypt initial data and later to decrypt the intermediate result.
+    * Loads the Verifier's public context (verifier_public_context) to re-encrypt the final result for the Verifier.
+    * The Owner never sees or uses the Verifier's private key.
+
+2. **Verifier (verifier_transform_data, verifier_verify):**
+    * Loads the Owner's public context (owner_public_context) to perform homomorphic operations on the data encrypted by the Owner. These operations (like dot product) do not require the private key.
+    * Loads its own private key (verifier_private_key) to decrypt the final package that the Owner specifically encrypted for it.
+    * The Verifier never sees or uses the Owner's private key.
+
+### 3. Data vs. Keys
+
+The data being exchanged between the Owner and Verifier is ciphertext (encrypted data), not the keys themselves.
+* In owner_finalize_data, the owner's private key is used to perform a decryption: plaintext_result = enc_sm.decrypt()[0].
+* Crucially, the result of this decryption (plaintext_result) is immediately re-encrypted with the Verifier's public key.
+* The owner's private key itself is never serialized, written to a file (other than its own secure key file), or included in any data package sent to the Verifier.
+
+### 4. Underlying Cryptographic Security
+
+The entire system relies on the security of the BFV (Brakerski-Fan-Vercauteren) scheme, which is based on the Ring Learning with Errors (RLWE) problem. This problem is widely believed to be computationally "hard," meaning that even with massive computing power, it is infeasible to:
+* Derive a private key from a public key.
+* Decrypt a ciphertext without its corresponding private key.
+
+Since the Verifier never possesses the Owner's private key, it cannot decrypt any data encrypted with the Owner's public key (like the registered_data.json or transformed_data.json). Attempting to use its own verifier_private.key on this data would produce meaningless garbage. Consequently, it has no cryptographic means to attack or discover the Owner's private key.
+
+### Summary Table
+
+This table illustrates the strict separation of roles and assets:
+
+| Party | Has Access To | Does NOT Have Access To |
+| :--- | :--- | :--- |
+| Data Owner | • Its own private key<br>• The Verifier's public key | • The Verifier's private key |
+| Verifier | • Its own private key<br>• The Owner's public key | • The Data Owner's private key |
+
+### Protocol Data Flow Security
+
+| Phase | Data File | Encrypted With | Can Decrypt? |
+| :--- | :--- | :--- | :--- |
+| 1. Owner Registers | registered_data.json | Owner's Public Key | Only the Owner |
+| 2. Verifier Transforms | transformed_data.json| Owner's Public Key | Only the Owner |
+| 3. Owner Finalizes | final_package.json | Verifier's Public Key | Only the Verifier |
+| 4. Verifier Verifies | (Final plaintext result) | N/A (decrypted in memory) | Verifier |
+
+As you can see from the table, at no point does the Verifier have access to data that its key can decrypt until after the Owner has explicitly decrypted the intermediate result and re-encrypted it for the Verifier. The Owner's private key is only ever used by the Owner on their own machine, and the Verifier's private key is only ever used by the Verifier. The system is secure precisely because these two keys are independent and are never shared.
+
+### Conclusion
+
+The security of this protocol is fundamentally sound in its design. The use of two independent key pairs and the strict adherence to the principles of asymmetric cryptography ensure that the Verifier's private key is only useful for decrypting data specifically encrypted for it. It provides no leverage whatsoever to decrypt, reverse-engineer, or discover the Data Owner's private key.
