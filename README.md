@@ -53,13 +53,6 @@ Submit challenge data files with unencrypted mappings to the server. The challen
 ```json
 {
     "success": true,
-    "file_id": "550e8400-e29b-41d4-a716-446655440001",
-    "user_id": "550e8400-e29b-41d4-a716-446655440000",
-    "key_name": "my_key",
-    "key_index": 1,
-    "segments": 10,
-    "file_hash": "abc123...",
-    "mapping_sequence_hash": "def456...",
     "message": "Challenge data file submitted successfully"
 }
 ```
