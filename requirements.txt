@@ -1,0 +1,9 @@
+rich
+requests
+numpy
+Flask
+Flask-SQLAlchemy
+SQLAlchemy
+tenseal
+reedsolo
+cryptography
