@@ -274,4 +274,155 @@ The server runs in debug mode by default. For production deployment:
 1. Set `debug=False` in the app.run() call
 2. Use a production WSGI server (e.g., Gunicorn)
 3. Configure proper database settings
-4. Set up proper logging configuration 
+4. Set up proper logging configuration
+
+---
+
+## Mystery Protocol Technical Analysis
+
+### Protocol Overview
+
+The Mystery Protocol is a sophisticated cryptographic protocol that enables secure password/string verification between two parties (Owner and Verifier) without revealing sensitive information. The protocol uses homomorphic encryption, commitment schemes, and Reed-Solomon error correction to provide:
+
+1. **Secure Verification**: Verify if an owner knows a secret string without revealing the string
+2. **Prize Mechanism**: A cryptographic prize that can only be unlocked with the correct sequence
+3. **Privacy Protection**: All operations are performed on encrypted data
+4. **Commitment Security**: Uses cryptographic commitments to prevent cheating
+5. **Error Correction**: Reed-Solomon encoding ensures prize integrity
+
+### Key Components
+
+#### 1. **MappingGenerator Class**
+- Generates secret character-to-number mappings
+- Uses configurable segmentation (default: 10 segments)
+- Creates position-dependent mappings for each character in the alphabet
+- Alphabet includes: letters, digits, punctuation, and space (95 characters total)
+
+#### 2. **MysteryProtocol Class**
+- Main protocol implementation using TenSEAL homomorphic encryption
+- BFV encryption scheme with configurable parameters
+- Default: 8192 polynomial modulus degree, 65537 plain modulus
+- Supports full alphabet of 95 printable ASCII characters
+
+### Detailed Protocol Flow
+
+#### **Phase 1: Setup and Key Generation**
+
+**Step 1: Key Provisioning (`provision_keys()`)**
+- Creates BFV homomorphic encryption contexts for both parties
+- Generates Galois keys for homomorphic operations
+- Produces public/private key pairs for Owner and Verifier
+- Keys are serialized for storage and transmission
+
+**Step 2: Prize Generation (`generate_prize()`)**
+- Generates a 256-bit cryptographic prize (random number)
+- Applies Reed-Solomon error correction (32 data bytes + 16 parity bytes)
+- Encrypts each byte individually using Owner's public key
+- Stores encrypted prize chunks with metadata
+
+**Step 3: Mapping Generation (`generate_mappings()`)**
+- Creates position-dependent character-to-number mappings
+- Each position has its own randomized mapping dictionary
+- Characters are partitioned into configurable segments (default: 10)
+- Each segment gets a random number assignment
+
+#### **Phase 2: Commitment Phase**
+
+**Step 4: Verifier Commitment (`verifier_commit()`)**
+- Verifier creates a cryptographic commitment to the secret mappings
+- Uses SHA-256 hash of (salt + mappings) as commitment
+- Generates additional salt for password-dependent hashing
+- Commitment prevents the verifier from changing mappings after seeing Owner's data
+
+#### **Phase 3: Data Registration and Transformation**
+
+**Step 5: Owner Data Registration (`owner_register_data()`)**
+- Owner encrypts their secret string character by character
+- Each character is encoded as a one-hot vector (95 dimensions)
+- Vectors are encrypted using Owner's private key
+- Results in homomorphically encrypted character representations
+
+**Step 6: Verifier Data Transformation (`verifier_transform_data()`)**
+- Verifier applies secret mappings to Owner's encrypted data
+- Uses homomorphic dot product: encrypted_char_vector · mapping_vector
+- Transforms encrypted characters into encrypted mapped numbers
+- Creates reveal package with transformed data and commitment details
+
+#### **Phase 4: Finalization and Verification**
+
+**Step 7: Owner Finalization (`owner_finalize_data()`)**
+- **Commitment Verification**: Owner verifies Verifier's commitment to prevent cheating
+- **Password Sequence Generation**: Decrypts transformed vectors to get the password sequence
+- **Password-Dependent Hashing**: Creates a hash from the password sequence
+- **Prize Protection**: XORs prize chunks with password hash bytes for protection
+- **Re-encryption**: Encrypts protected prize chunks with Verifier's public key
+- **Final Package Creation**: Produces sequence data encrypted for Verifier
+
+**Step 8: Final Verification (`verifier_verify()`)**
+- **Sequence Verification**: Uses sum of squares to check if target sequence matches
+  - Computes: Σ(encrypted_sequence[i] - target_sequence[i])²
+  - Applies cryptographic blinding for security
+  - Sequence matches if and only if sum equals zero
+- **Prize Unlocking**: If verification succeeds:
+  - Computes same password-dependent hash from target sequence
+  - Decrypts password-protected prize chunks
+  - Removes password protection using XOR with hash bytes
+  - Reconstructs original prize using Reed-Solomon decoding
+  - Returns the unlocked prize value
+
+### Security Features
+
+#### **Cryptographic Security**
+1. **Homomorphic Encryption**: All computations on encrypted data using TenSEAL/BFV
+2. **Commitment Scheme**: SHA-256 commitments prevent verifier cheating
+3. **Blinding**: Random blinding factor protects verification computation
+4. **Password Protection**: Prize is protected by password-dependent hash
+
+#### **Privacy Protection**
+1. **No Information Leakage**: Owner's secret string never revealed
+2. **Mapping Secrecy**: Verifier's mappings remain secret until commitment reveal
+3. **Encrypted Storage**: All sensitive data stored in encrypted form
+4. **One-Time Use**: Each mapping sequence can only be verified once
+
+#### **Error Correction and Integrity**
+1. **Reed-Solomon Coding**: 16 parity bytes allow correction of up to 8 byte errors
+2. **Hash Verification**: Multiple hash checks ensure data integrity
+3. **Cryptographic Hashing**: SHA-256 used throughout for integrity checks
+
+#### **Anti-Cheating Measures**
+1. **Commitment Binding**: Verifier cannot change mappings after commitment
+2. **Zero-Knowledge Verification**: Verification reveals only success/failure
+3. **Unique Verification**: Each challenge can only be solved once
+4. **Tamper Detection**: Hash mismatches detect any data tampering
+
+### Protocol Properties
+
+#### **Security Properties**
+- **Completeness**: If Owner knows the correct string, verification succeeds
+- **Soundness**: If Owner doesn't know the correct string, verification fails
+- **Zero-Knowledge**: Verifier learns nothing about Owner's string except match/no-match
+- **Commitment Binding**: Verifier cannot change mappings after commitment
+
+#### **Performance Characteristics**
+- **Homomorphic Operations**: O(n) where n is string length
+- **Memory Usage**: Linear in string length and alphabet size
+- **Communication Complexity**: O(n × alphabet_size) for encrypted vectors
+- **Computational Complexity**: Dominated by homomorphic encryption operations
+
+### Summary
+
+The Mystery Protocol represents a sophisticated implementation of secure multi-party computation for password/string verification. It combines multiple cryptographic primitives:
+
+- **Homomorphic Encryption** for privacy-preserving computation
+- **Commitment Schemes** for preventing cheating
+- **Reed-Solomon Codes** for error correction
+- **Cryptographic Hashing** for integrity and password protection
+
+The protocol ensures that:
+1. The Owner's secret string remains completely private
+2. The Verifier's mappings remain secret until the commitment reveal
+3. Verification can only succeed with the correct string
+4. The cryptographic prize can only be unlocked with successful verification
+5. All operations are performed without revealing sensitive information
+
+This makes it suitable for applications requiring secure authentication, zero-knowledge proofs, or cryptographic challenges where privacy and security are paramount. 
