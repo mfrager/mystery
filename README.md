@@ -422,7 +422,6 @@ This makes it suitable for applications requiring secure authentication, zero-kn
 
 ## The "Interactive Transformation" Protocol
 
-This protocol requires a two-step interaction after the initial data is sent. It perfectly satisfies all your constraints:
 1. Two Key Pairs: The Data Owner (O) and Verifier (V) each have their own (pk_O, sk_O) and (pk_V, sk_V).
 2. sk_O is Never Sent: The Data Owner's private key is only ever used locally by the owner.
 3. Mappings are Secret to Verifier: The Data Owner has no knowledge of the mapping rules.
