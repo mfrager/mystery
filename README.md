@@ -186,21 +186,18 @@ The server uses SQLAlchemy with the following models:
 - Stores challenge data packages (compressed binary data) with their unencrypted mappings (extended to 64 characters)
 - Tracks usage status and creation timestamps
 - Creates unique hashes for deduplication based on compressed binary data
-- Uses UUID primary key
 - Tracks user_id, key_name, and key_index for user association
 
 ### AuthenticationSession
 - Manages time-limited authentication sessions
 - Tracks verification attempts and session validity
 - Links to challenge data files
-- Uses UUID primary key
 - Tracks user_id for rate limiting
 
 ### VerificationAttempt
 - Records all verification attempts
-- Tracks success/failure and prize values
+- Tracks success/failure
 - Does not store attempted sequences for security reasons
-- Uses UUID primary key
 - Tracks user_id for rate limiting
 
 ## Security Features
