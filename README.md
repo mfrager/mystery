@@ -501,8 +501,8 @@ This table illustrates the strict separation of roles and assets:
 
 | Party | Has Access To | Does NOT Have Access To |
 | :--- | :--- | :--- |
-| Data Owner | • Its own private key<br>• The Verifier's public key | • The Verifier's private key |
-| Verifier | • Its own private key<br>• The Owner's public key | • The Data Owner's private key |
+| Data Owner | • Its own private key<br>• The Verifier's public key | |
+| Verifier | • Its own private key<br>• The Owner's public key | • The Data Owner's private key<br>• The Data Owner's secret string |
 
 ### Protocol Data Flow Security
 
@@ -517,4 +517,4 @@ As you can see from the table, at no point does the Verifier have access to data
 
 ### Conclusion
 
-The security of this protocol is fundamentally sound in its design. The use of two independent key pairs and the strict adherence to the principles of asymmetric cryptography ensure that the Verifier's private key is only useful for decrypting data specifically encrypted for it. It provides no leverage whatsoever to decrypt, reverse-engineer, or discover the Data Owner's private key.
+The security of this protocol is fundamentally sound in its design. The use of two independent key pairs and the strict adherence to the principles of asymmetric cryptography ensure that the Verifier's private key is only useful for decrypting data specifically encrypted for it. It provides no leverage whatsoever to decrypt, reverse-engineer, or discover the Data Owner's secret string.
