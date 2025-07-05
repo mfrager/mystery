@@ -98,7 +98,6 @@ class VerificationAttempt(db.Model):
     session_id = db.Column(db.String(36), db.ForeignKey('authentication_sessions.id'), nullable=False)
     user_id = db.Column(db.String(36), nullable=False)
     was_successful = db.Column(db.Boolean, nullable=False)
-    prize_value = db.Column(db.String(100), nullable=True)  # Store as string for large numbers
     attempted_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
     
     # Relationship
@@ -110,7 +109,6 @@ class VerificationAttempt(db.Model):
             'session_id': self.session_id,
             'user_id': self.user_id,
             'was_successful': self.was_successful,
-            'prize_value': self.prize_value,
             'attempted_at': ensure_timezone_aware(self.attempted_at).isoformat()
         }
 
@@ -488,7 +486,6 @@ def verify_solution():
             session_id=auth_session.id,
             user_id=auth_session.user_id,
             was_successful=is_match,
-            prize_value=str(prize_value) if prize_value else None
         )
         
         db.session.add(attempt)
