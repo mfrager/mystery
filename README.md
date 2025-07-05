@@ -74,7 +74,6 @@ Get an unused challenge data instance and mapping for client authentication. Ret
 {
     "success": true,
     "session_token": "secure-token-123",
-    "file_hash": "abc123...",
     "mapping": [...],
     "expires_at": "2024-01-01T12:00:00",
     "timeout_minutes": 30
