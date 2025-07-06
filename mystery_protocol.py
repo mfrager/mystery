@@ -414,11 +414,8 @@ class MysteryProtocol:
             diff = enc_final - [target_sequence[i] if i < len(target_sequence) else 0]
             squared_diff = diff * diff
             total_sum_of_squares += squared_diff
-        
-        # Apply blinding
-        blinder = random.randint(1, self.plain_modulus - 1)
-        locked_sum = total_sum_of_squares * blinder
-        decrypted_locked_sum = locked_sum.decrypt()[0]
+
+        decrypted_locked_sum = total_sum_of_squares.decrypt()[0]
         
         is_match = (round(decrypted_locked_sum) == 0)
         
