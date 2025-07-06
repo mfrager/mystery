@@ -352,7 +352,6 @@ The Mystery Protocol is a sophisticated cryptographic protocol that enables secu
 **Step 8: Final Verification (`verifier_verify()`)**
 - **Sequence Verification**: Uses sum of squares to check if target sequence matches
   - Computes: Σ(encrypted_sequence[i] - target_sequence[i])²
-  - Applies cryptographic blinding for security
   - Sequence matches if and only if sum equals zero
 - **Prize Unlocking**: If verification succeeds:
   - Computes same password-dependent hash from target sequence
@@ -366,8 +365,7 @@ The Mystery Protocol is a sophisticated cryptographic protocol that enables secu
 #### **Cryptographic Security**
 1. **Homomorphic Encryption**: All computations on encrypted data using TenSEAL/BFV
 2. **Commitment Scheme**: SHA-256 commitments prevent verifier cheating
-3. **Blinding**: Random blinding factor protects verification computation
-4. **Password Protection**: Prize is protected by password-dependent hash
+3. **Password Protection**: Prize is protected by password-dependent hash
 
 #### **Privacy Protection**
 1. **No Information Leakage**: Owner's secret string never revealed
