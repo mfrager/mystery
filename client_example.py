@@ -10,6 +10,7 @@ import base64
 import logging
 import uuid
 import bz2
+import traceback
 from mystery_protocol import MysteryProtocol
 
 # Configure logging
@@ -135,10 +136,11 @@ def demo_complete_workflow():
     # Transform data
     reveal_package = protocol.verifier_transform_data(
         owner_keys['public_context'],
+        verifier_keys['public_context'],
         registered_data,
         commitment_package
     )
-    
+
     # Finalize data
     challenge_package = protocol.owner_finalize_data(
         owner_keys['private_key'],
@@ -147,6 +149,8 @@ def demo_complete_workflow():
         commitment_package['commitment'],
         prize_data
     )
+
+    #print(f"Prize data: {prize_data['original_prize_for_reference']}")
     
     print(f"✅ Protocol data generated for secret: '{secret_string}'")
     
@@ -308,6 +312,7 @@ def demo_wrong_sequence():
     # Transform data
     reveal_package = protocol.verifier_transform_data(
         owner_keys['public_context'],
+        verifier_keys['public_context'],
         registered_data,
         commitment_package
     )
@@ -388,3 +393,4 @@ if __name__ == "__main__":
         print("❌ Could not connect to server. Make sure the server is running at http://localhost:1776")
     except Exception as e:
         print(f"❌ Demo failed with error: {e}") 
+        print(traceback.format_exc())

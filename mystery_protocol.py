@@ -241,7 +241,8 @@ class MysteryProtocol:
         logging.debug(f"Encrypted {len(encrypted_vectors)} character vectors")
         return encrypted_vectors
     
-    def verifier_transform_data(self, owner_public_context: bytes, registered_data: List[str], 
+    def verifier_transform_data(self, owner_public_context: bytes, verifier_public_context: bytes,
+                                registered_data: List[str], 
                               commitment_package: Dict[str, Any]) -> Dict[str, Any]:
         """
         Verifier's Interactive Step: Apply mappings and reveal secrets.
@@ -257,23 +258,55 @@ class MysteryProtocol:
         logging.debug("Applying mappings to registered data")
         
         o_pub_ctx = ts.context_from(owner_public_context)
+        v_pub_ctx = ts.context_from(verifier_public_context)
         secret_mappings = commitment_package["secret_mappings"]
         
         if len(registered_data) != len(secret_mappings):
             raise ValueError(f"Data length mismatch: {len(registered_data)} vs {len(secret_mappings)}")
         
         transformed_vectors = []
+        prize_password_vectors = []
+        blinding_mul_factors = []
+        blinding_add_factors = []
+        pass_mul_factors = []
+        pass_add_factors = []
         for i, b64_enc_s in enumerate(registered_data):
             enc_s = ts.bfv_vector_from(o_pub_ctx, base64.b64decode(b64_enc_s))
             mapping_vec = [secret_mappings[i].get(c, 0) for c in self.alphabet]
             enc_sm = enc_s.dot(mapping_vec)
-            transformed_vectors.append(base64.b64encode(enc_sm.serialize()).decode('utf-8'))
+            mul_factor = random.randint(1, 1024)
+            add_factor = random.randint(1, 256)
+            blinding_mul = ts.bfv_vector(o_pub_ctx, [mul_factor])
+            blinding_add = ts.bfv_vector(o_pub_ctx, [add_factor])
+            blinding_mul_verify = ts.bfv_vector(v_pub_ctx, [mul_factor])
+            blinding_add_verify = ts.bfv_vector(v_pub_ctx, [add_factor])
+            add_factor = random.randint(1, 256)
+            enc_sm_blinding = (enc_sm * blinding_mul) + blinding_add
+            blinding_mul_factors.append(base64.b64encode(blinding_mul_verify.serialize()).decode('utf-8'))
+            blinding_add_factors.append(base64.b64encode(blinding_add_verify.serialize()).decode('utf-8'))
+            transformed_vectors.append(base64.b64encode(enc_sm_blinding.serialize()).decode('utf-8'))
+
+            pass_mul_factor = random.randint(1, 1024)
+            pass_add_factor = random.randint(1, 256)
+            pass_mul = ts.bfv_vector(o_pub_ctx, [pass_mul_factor])
+            pass_add = ts.bfv_vector(o_pub_ctx, [pass_add_factor])
+            pass_mul_verify = ts.bfv_vector(v_pub_ctx, [pass_mul_factor])
+            pass_add_verify = ts.bfv_vector(v_pub_ctx, [pass_add_factor])
+            enc_sm_password = (enc_sm * pass_mul) + pass_add
+            pass_mul_factors.append(base64.b64encode(pass_mul_verify.serialize()).decode('utf-8'))
+            pass_add_factors.append(base64.b64encode(pass_add_verify.serialize()).decode('utf-8'))
+            prize_password_vectors.append(base64.b64encode(enc_sm_password.serialize()).decode('utf-8'))
         
         reveal_package = {
-            "transformed_vectors": transformed_vectors,
-            "salt": commitment_package["salt"],
-            "secret_mappings": secret_mappings,
-            "password_hash_salt": commitment_package["password_hash_salt"]
+            "transformed_vectors": transformed_vectors, # sent to client
+            "prize_password_vectors": prize_password_vectors, # sent to client
+            "blinding_factors": [
+                blinding_mul_factors, blinding_add_factors,
+                pass_mul_factors, pass_add_factors
+            ], # store on server
+            "salt": commitment_package["salt"], # store on server
+            "secret_mappings": secret_mappings, # store on server
+            "password_hash_salt": commitment_package["password_hash_salt"] # store on server
         }
         
         logging.debug(f"Transformed {len(transformed_vectors)} vectors")
@@ -315,7 +348,7 @@ class MysteryProtocol:
         
         # Generate password sequence
         password_sequence = []
-        for b64_enc_sm in reveal_package["transformed_vectors"]:
+        for b64_enc_sm in reveal_package["prize_password_vectors"]:
             enc_sm = ts.bfv_vector_from(o_priv_ctx, base64.b64decode(b64_enc_sm))
             decrypted_value = enc_sm.decrypt()[0]
             password_sequence.append(decrypted_value)
@@ -372,11 +405,12 @@ class MysteryProtocol:
             prize_data_dict["original_prize_for_reference"] = prize_data.get("original_prize_for_reference", 0)
         
         final_package = {
+            "blinding_factors": reveal_package["blinding_factors"],
             "sequence_data": final_sequence_data,
             "prize_data": prize_data_dict
         }
         
-        logging.debug("Final package created successfully")
+        logging.info("Final package created successfully")
         return final_package
     
     def verifier_verify(self, verifier_private_key: bytes, final_package: Dict[str, Any], 
@@ -388,13 +422,15 @@ class MysteryProtocol:
             verifier_private_key: Verifier's private key bytes
             final_package: Package from owner_finalize_data
             target_sequence: Target sequence to verify
-            
+            blinding_factors: Blinding factors from verifier_transform_data
         Returns:
             Tuple of (is_match, prize_value) where prize_value is 0 if no match
         """
         logging.debug("Starting final verification and prize unlocking")
+        
         #logging.info(f"Target sequence: {target_sequence}")
         #logging.info(f"Sequence data: {len(final_package['sequence_data'])}")
+        #logging.info(f"Blinding factors: {blinding_factors}")
         
         v_priv_ctx = ts.context_from(verifier_private_key)
         
@@ -407,13 +443,31 @@ class MysteryProtocol:
             encrypted_chunk = ts.bfv_vector_from(v_priv_ctx, base64.b64decode(chunk_b64))
             encrypted_prize_chunks.append(encrypted_chunk)
         
-        # Verify sequence using sum of squares
+        # Verify sequence using sum of squares with blinding
         total_sum_of_squares = ts.bfv_vector(v_priv_ctx, [0])
+        prize_password_sequence = []
         for i, b64_enc_final in enumerate(sequence_data):
             enc_final = ts.bfv_vector_from(v_priv_ctx, base64.b64decode(b64_enc_final))
-            diff = enc_final - [target_sequence[i] if i < len(target_sequence) else 0]
+            
+            # Extract blinding factors
+            blinding_mul = ts.bfv_vector_from(v_priv_ctx, base64.b64decode(final_package["blinding_factors"][0][i])).decrypt()[0]
+            blinding_add = ts.bfv_vector_from(v_priv_ctx, base64.b64decode(final_package["blinding_factors"][1][i])).decrypt()[0]
+                
+            # Apply blinding to target value: (target * blinding_mul) + blinding_add
+            target_value = target_sequence[i] if i < len(target_sequence) else 0
+            blinded_target = ts.bfv_vector(v_priv_ctx, [(target_value * blinding_mul) + blinding_add])
+
+            #logging.info(f"Enc final: {enc_final.decrypt()[0]}")
+            #logging.info(f"Blinded target: {blinded_target.decrypt()[0]}")
+
+            # Compute difference with blinded values
+            diff = enc_final - blinded_target
             squared_diff = diff * diff
             total_sum_of_squares += squared_diff
+
+            pass_mul = ts.bfv_vector_from(v_priv_ctx, base64.b64decode(final_package["blinding_factors"][2][i])).decrypt()[0]
+            pass_add = ts.bfv_vector_from(v_priv_ctx, base64.b64decode(final_package["blinding_factors"][3][i])).decrypt()[0]
+            prize_password_sequence.append((int(target_sequence[i]) * pass_mul) + pass_add)
 
         decrypted_locked_sum = total_sum_of_squares.decrypt()[0]
         
@@ -427,7 +481,7 @@ class MysteryProtocol:
         
         # Compute password hash for prize decryption
         password_hash_salt = prize_data.get("password_hash_salt", "")
-        password_sequence_str = ",".join(map(str, target_sequence))
+        password_sequence_str = ",".join(map(str, prize_password_sequence))
         computed_password_hash = hashlib.sha256((password_hash_salt + password_sequence_str).encode()).hexdigest()
         
         logging.debug("Password hash computed - proceeding with prize decryption")

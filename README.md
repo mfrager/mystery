@@ -336,8 +336,10 @@ The Mystery Protocol is a sophisticated cryptographic protocol that enables secu
 **Step 6: Verifier Data Transformation (`verifier_transform_data()`)**
 - Verifier applies secret mappings to Owner's encrypted data
 - Uses homomorphic dot product: encrypted_char_vector · mapping_vector
-- Transforms encrypted characters into encrypted mapped numbers
+- Applies random blinding factors: (mapped_value × blinding_mul) + blinding_add
+- Transforms encrypted characters into encrypted blinded mapped numbers
 - Creates reveal package with transformed data and commitment details
+- Stores blinding factors for use in final verification
 
 #### **Phase 4: Finalization and Verification**
 
@@ -351,7 +353,9 @@ The Mystery Protocol is a sophisticated cryptographic protocol that enables secu
 
 **Step 8: Final Verification (`verifier_verify()`)**
 - **Sequence Verification**: Uses sum of squares to check if target sequence matches
-  - Computes: Σ(encrypted_sequence[i] - target_sequence[i])²
+  - Applies blinding factors to target values for security
+  - Computes: Σ(encrypted_sequence[i] - blinded_target[i])²
+  - Adds random blinding to final sum to hide intermediate results
   - Sequence matches if and only if sum equals zero
 - **Prize Unlocking**: If verification succeeds:
   - Computes same password-dependent hash from target sequence
@@ -365,7 +369,8 @@ The Mystery Protocol is a sophisticated cryptographic protocol that enables secu
 #### **Cryptographic Security**
 1. **Homomorphic Encryption**: All computations on encrypted data using TenSEAL/BFV
 2. **Commitment Scheme**: SHA-256 commitments prevent verifier cheating
-3. **Password Protection**: Prize is protected by password-dependent hash
+3. **Blinding Factors**: Random multiplicative and additive blinding protects verification computation
+4. **Password Protection**: Prize is protected by password-dependent hash
 
 #### **Privacy Protection**
 1. **No Information Leakage**: Owner's secret string never revealed
